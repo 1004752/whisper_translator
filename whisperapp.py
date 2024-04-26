@@ -15,7 +15,10 @@ def prepare():
                                   force_reload=False)
     (get_speech_ts, _, _, _, _) = utils
 
-    whisper_model = whisper.load_model("small")
+    whisper_model = whisper.load_model(
+        name="small",
+        device="cuda"
+    )
 
     return model, get_speech_ts, whisper_model
 
@@ -47,7 +50,8 @@ class WhisperPy(ttk.Window):
         self.mainloop()
 
     def callback(self, text, translation):
-        self.textbox.insert(END, f'>> {text}\n>> {translation}\n')
+        # self.textbox.insert(END, f'>> {text}\n>> {translation}\n')
+        self.textbox.insert(END, f'>> {text}\n')
         self.textbox.yview(END)
 
     def start_click(self):

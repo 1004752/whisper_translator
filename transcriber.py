@@ -8,6 +8,8 @@ import torch
 DEFAULT_SAMPLE_RATE = 16000
 AGGRESSIVENESS = 3
 
+total_text_summary = []
+
 
 class LoopbackAudio(threading.Thread):
     def __init__(self, callback, mic, samplerate=DEFAULT_SAMPLE_RATE):
@@ -143,6 +145,13 @@ def translate_text(target, text):
     return result
 
 
+def process_audio(whisper_model, audio_float32, callback):
+    transcript = whisper_model.transcribe(audio=audio_float32)
+    total_text_summary.append(transcript['text'])
+    last_index = len(total_text_summary) - 1
+    callback(total_text_summary[last_index], "")
+
+
 def start_listen(whisper_model, model, get_speech_ts, mic, event, callback):
     print('start listening')
     # Start audio with VAD
@@ -153,26 +162,25 @@ def start_listen(whisper_model, model, get_speech_ts, mic, event, callback):
 
     frames = vad_audio.vad_collector()
 
+    segment_duration = 7  # 세그먼트 길이 (초)
+    segment_frames = segment_duration * DEFAULT_SAMPLE_RATE
+
     wav_data = bytearray()
     for frame in frames:
         if frame is not None:
             wav_data.extend(frame)
+            if len(wav_data) >= segment_frames:
+                newsound = np.frombuffer(wav_data[:segment_frames], np.int16)
+                audio_float32 = Int2Float(newsound)
+                process_audio(whisper_model, audio_float32, callback)
+                wav_data = wav_data[segment_frames:]
         else:
             newsound = np.frombuffer(wav_data, np.int16)
             audio_float32 = Int2Float(newsound)
-            time_stamps = get_speech_ts(
-                audio_float32, model, sampling_rate=DEFAULT_SAMPLE_RATE)
+            time_stamps = get_speech_ts(audio_float32, model, sampling_rate=DEFAULT_SAMPLE_RATE)
 
             if (len(time_stamps) > 0):
-                transcript = whisper_model.transcribe(audio=audio_float32)
-                print(transcript['text'])
-                # translation = translate_text('ko', transcript['text'])
-                # callback(transcript['text'], translation['translatedText'])
-                callback(transcript['text'], "")
-            else:
-                pass
-            print()
-
+                process_audio(whisper_model, audio_float32, callback)
             wav_data = bytearray()
     print('listening stoped')
     vad_audio.destroy()
